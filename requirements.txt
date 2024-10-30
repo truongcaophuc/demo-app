@@ -1,0 +1,5 @@
+streamlit
+lightgbm
+joblib
+numpy
+pandas
