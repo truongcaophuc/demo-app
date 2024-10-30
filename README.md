@@ -1,3 +1,4 @@
+
 Making sure you have installed newest Streamlit version. To install Streamlit, type in the terminal:
 	`pip install streamlit`
 or to install all requirement packages:
