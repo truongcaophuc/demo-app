@@ -32,16 +32,14 @@ def drop_last_sem(df):
     df.at[index, sotchk_name] = np.nan
   return df
 
-train_data = pd.read_csv('resource/train_data.csv')
-new_data = pd.read_csv('resource/X_train.csv')
+scaler_cluster = joblib.load('resource/scaler_cluster.pkl')
+kmeans_cluster = joblib.load('resource/kmeans_perfCluster.pkl')
 
-scaler = joblib.load('resource/scaler_cluster.pkl')
-
-def normalize_column(df, column_names, src):
+def normalize_column(df, column_names):
     for col in column_names:
         # Convert column to numeric values, coercing any errors (non-numeric values) to NaN
         df[col] = pd.to_numeric(df[col], errors='coerce')
-        src[col] = pd.to_numeric(src[col], errors='coerce')
+        
 
         # Check if the column contains all NaN values (skip normalization if true)
         if df[col].isna().all():
@@ -49,8 +47,8 @@ def normalize_column(df, column_names, src):
             continue
 
         # Min and max for the column, excluding NaN values (use `skipna=True`)
-        min_val = src[col].min()
-        max_val = src[col].max()
+        min_val = df[col].min()
+        max_val = df[col].max()
 
         # Prevent division by zero if min == max (which happens when all non-NaN values are identical)
         if min_val == max_val:
@@ -63,11 +61,9 @@ def normalize_column(df, column_names, src):
     return df
 
 def calculate_perfCluster(df, columns ):
-  scaled_data = scaler.fit_transform(df[columns])
+  scaled_data = scaler_cluster.fit_transform(df[columns])
 
-  kmeans = joblib.load('resource/kmeans_perfCluster.pkl')
-
-  df['performance_cluster'] = kmeans.predict(scaled_data)
+  df['performance_cluster'] = kmeans_cluster.predict(scaled_data)
   return df
 
 
@@ -103,14 +99,14 @@ def feature_engineering(df):
   df['AverageDRL'] = df[drl_cols].mean(axis=1, skipna=True)
   df['NumSems'] = df[dtbhk_cols].notna().sum(axis=1)
 
-  print('*'*16)
-  print('Calculate Average done!')
+  #print('*'*16)
+  #print('Calculate Average done!')
 
   segment_cols = ['AverageDTBHK','AverageSOTCHK','AverageDRL', 'NumSems']
   df = calculate_perfCluster(df, segment_cols)
 
-  print('*'*16)
-  print('Calculate PerfCluster done!')
+  #print('*'*16)
+  #print('Calculate PerfCluster done!')
 
   df['WeightedPerformance'] = (w_dtbhk*df['AverageDTBHK'] + w_sotchk*df['AverageSOTCHK'] + w_drl*df['AverageDRL'])/(w_dtbhk+w_sotchk+w_drl)
 
@@ -118,22 +114,22 @@ def feature_engineering(df):
   df['SlopeSOTCHK'] = df.apply(lambda row: calculate_slope(row[sotchk_cols]), axis=1)
   df['SlopeDRL'] = df.apply(lambda row: calculate_slope(row[drl_cols]), axis=1)
 
-  print('*'*16)
-  print('Calculate Performance done!')
+  #print('*'*16)
+  #print('Calculate Performance done!')
 
   df['StabilityDTBHK'] = df[dtbhk_cols].std(axis=1, skipna=True)
   df['StabilitySOTCHK'] = df[sotchk_cols].std(axis=1, skipna=True)
   df['StabilityDRL'] = df[drl_cols].std(axis=1, skipna=True)
 
-  print('*'*16)
-  print('Calculate Stability done!')
+  #print('*'*16)
+  #print('Calculate Stability done!')
 
   df['SlopeToStabilityDTBHK'] = df['SlopeDTBHK'] / df['StabilityDTBHK']
   df['SlopeToStabilitySOTCHK'] = df['SlopeSOTCHK'] / df['StabilitySOTCHK']
   df['SlopeToStabilityDRL'] = df['SlopeDRL'] / df['StabilityDRL']
 
-  print('*'*16)
-  print('Calculate SlopeToAverage done!')
+  #print('*'*16)
+  #print('Calculate SlopeToAverage done!')
 
   return df.drop(dtbhk_cols+sotchk_cols+drl_cols, axis=1)
 
@@ -144,13 +140,13 @@ def get_input_from_user():
                   'Bị cảnh cáo vì đóng học phí trễ',
                   'Được xem xét hạ mức',
                   'Bị cảnh cáo vì ĐTB và trễ học phí',
-                  'Bị cảnh cáo vì đtb 2 học kỳ liên tiếp < 4']
+                  'Bị cảnh cáo vì đtb 2 học kỳ liên tiếp<4']
 
   # Define place holder
 
   drl_df = pd.DataFrame([
       {
-      'HK1_drl': np.nan,
+      'HK1_drl': 80,
       'HK2_drl': np.nan,
       'HK3_drl': np.nan,
       'HK4_drl': np.nan,
@@ -167,7 +163,7 @@ def get_input_from_user():
 
   dtbhk_df = pd.DataFrame([
       {
-      'HK1_dtbhk': np.nan,
+      'HK1_dtbhk': 8,
       'HK2_dtbhk': np.nan,
       'HK3_dtbhk': np.nan,
       'HK4_dtbhk': np.nan,
@@ -184,7 +180,7 @@ def get_input_from_user():
 
   sotchk_df = pd.DataFrame([
       {
-      'HK1_sotchk': np.nan,
+      'HK1_sotchk': 20,
       'HK2_sotchk': np.nan,
       'HK3_sotchk': np.nan,
       'HK4_sotchk': np.nan,
@@ -223,9 +219,9 @@ def get_input_from_user():
       if pass_avsc == "Chưa rõ":
           pass_avsc = np.nan
       elif pass_avsc == "Đã pass":
-          pass_avsc = 1.0
+          pass_avsc = 'True'
       else:
-          pass_avsc = 0.0
+          pass_avsc = 'False'
 
   # Get cchv
   with cchv_col:
@@ -270,9 +266,11 @@ def get_input_from_user():
       }
   ])
 
-  input_dataframe = pd.concat([edited_drl, 
-                               edited_dtbhk, 
-                               edited_sotchhk, 
-                               avsc_df,
-                               cchv_df,], axis=1)
+  input_dataframe = pd.concat([
+                            edited_drl, 
+                            edited_dtbhk, 
+                            edited_sotchhk, 
+                            avsc_df,
+                            cchv_df
+                            ], axis=1)
   return input_dataframe

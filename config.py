@@ -1,4 +1,4 @@
-CAT_FEATURES = ['CCHV_1', 'CCHV_2', 'CCHV_3', 'CCHV_4', 'CCHV_5', 'CCHV_6', 'pass_avsc']
+CAT_FEATURES = ['pass_avsc','CCHV_1', 'CCHV_2', 'CCHV_3', 'CCHV_4', 'CCHV_5', 'CCHV_6']
 
 ANOTHER_COLS = ['dtb_mean', 'dtb_std', 'dtb_diff','drl_mean', 'drl_std', 'sotchk_mean']
 
@@ -41,6 +41,13 @@ NUM_FEATURES_OG =[
     'HK12_sotchk']
 
 NUM_FEATURES_NEW = ['AverageDTBHK', 'AverageSOTCHK', 'AverageDRL', 'NumSems',
+       'performance_cluster', 'WeightedPerformance', 'SlopeDTBHK',
+       'SlopeSOTCHK', 'SlopeDRL', 'StabilityDTBHK', 'StabilitySOTCHK',
+       'StabilityDRL', 'SlopeToStabilityDTBHK', 'SlopeToStabilitySOTCHK',
+       'SlopeToStabilityDRL']
+
+FEATURES_ORDER = ['pass_avsc', 'CCHV_1', 'CCHV_2', 'CCHV_3', 'CCHV_4', 'CCHV_5', 'CCHV_6',
+       'AverageDTBHK', 'AverageSOTCHK', 'AverageDRL', 'NumSems',
        'performance_cluster', 'WeightedPerformance', 'SlopeDTBHK',
        'SlopeSOTCHK', 'SlopeDRL', 'StabilityDTBHK', 'StabilitySOTCHK',
        'StabilityDRL', 'SlopeToStabilityDTBHK', 'SlopeToStabilitySOTCHK',
