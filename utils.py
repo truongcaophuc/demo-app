@@ -1,63 +1,141 @@
-import joblib
+
 import numpy as np
 import pandas as pd
 import streamlit as st
+from sklearn.linear_model import LinearRegression
+from sklearn.preprocessing import StandardScaler
+from sklearn.cluster import KMeans
+import joblib
 
-def compute_skew(row):
-    row_without_nan = row.dropna()
-    if len(row_without_nan) >= 3:
-        return row_without_nan.skew()
-    else:
-        return 0
-    
+def drop_last_sem(df):
+  drl_cols = [col for col in df.columns if col.endswith('_drl') ]
+  dtbhk_cols = [col for col in df.columns if col.endswith('_dtbhk') ]
+  sotchk_cols = [col for col in df.columns if col.endswith('_sotchk') ]
+  for index, row in df.iterrows():
+    for idx, val in enumerate(row[dtbhk_cols]): # 1->12
+      last_sem = idx
+      drl_name = drl_cols[last_sem]
+      dtbhk_name = dtbhk_cols[last_sem]
+      sotchk_name = sotchk_cols[last_sem]
 
-def compute_kurt(row):
-    row_without_nan = row.dropna()
-    if len(row_without_nan) >= 3:
-        return row_without_nan.kurt()
-    else:
-        return 3
+      if pd.isna(val):
+        break
+
+    if pd.isna(row[drl_name]) and pd.isna(row[dtbhk_name]) and pd.isna(row[sotchk_name]):
+      sem_to_drop = last_sem-1
+      drl_name = drl_cols[sem_to_drop]
+      dtbhk_name = dtbhk_cols[sem_to_drop]
+      sotchk_name = sotchk_cols[sem_to_drop]
+
+    df.at[index, drl_name] = np.nan
+    df.at[index, dtbhk_name] = np.nan
+    df.at[index, sotchk_name] = np.nan
+  return df
+
+train_data = pd.read_csv('resource/train_data.csv')
+new_data = pd.read_csv('resource/X_train.csv')
+
+scaler = joblib.load('resource/scaler_cluster.pkl')
+
+def normalize_column(df, column_names, src):
+    for col in column_names:
+        # Convert column to numeric values, coercing any errors (non-numeric values) to NaN
+        df[col] = pd.to_numeric(df[col], errors='coerce')
+        src[col] = pd.to_numeric(src[col], errors='coerce')
+
+        # Check if the column contains all NaN values (skip normalization if true)
+        if df[col].isna().all():
+            print(f"Skipping normalization for column '{col}' because it contains all NaN values.")
+            continue
+
+        # Min and max for the column, excluding NaN values (use `skipna=True`)
+        min_val = src[col].min()
+        max_val = src[col].max()
+
+        # Prevent division by zero if min == max (which happens when all non-NaN values are identical)
+        if min_val == max_val:
+            print(f"Skipping normalization for column '{col}' because all non-NaN values are identical.")
+            continue
+
+        # Apply normalization formula, ignoring NaNs in the calculation
+        df[col] = (df[col] - min_val) / (max_val - min_val)
+
+    return df
+
+def calculate_perfCluster(df, columns ):
+  scaled_data = scaler.fit_transform(df[columns])
+
+  kmeans = joblib.load('resource/kmeans_perfCluster.pkl')
+
+  df['performance_cluster'] = kmeans.predict(scaled_data)
+  return df
 
 
-def cal_std(row):
-  #Standard deviration
-  return np.nanstd(row)
+def calculate_slope(scores):
+    # Filter out NaN values and their corresponding indices
+    valid_scores = [(i, score) for i, score in enumerate(scores) if not np.isnan(score)]
 
-def cal_diff(row):
-    notna = row.notna()  # Xác định vị trí của giá trị not NaN trong hàng
-    tmp=row[notna]
-    if len(tmp)>=2:
-      diff = tmp[-1] - tmp[- 2] 
-      return diff
-    else: 
-      return 0 
+    # If there are less than two valid scores, return NaN because you can't calculate a slope
+    if len(valid_scores) < 2:
+        return np.nan
+
+    # Unzip the valid (non-NaN) scores and their corresponding indices
+    x = np.array([i for i, _ in valid_scores]).reshape(-1, 1)  # Indices (semester)
+    y = np.array([score for _, score in valid_scores])  # Scores
+
+    # Fit a linear regression model to get the slope
+    model = LinearRegression()
+    model.fit(x, y)
+
+    return model.coef_[0]  # Return the slope
 
 def feature_engineering(df):
-  dtb_columns = [col for col in df.columns if col.endswith('_dtbhk')]
-  df['dtb_mean']= np.nanmean(df[dtb_columns],axis=1)
-  df['dtb_std']= df[dtb_columns].apply(cal_std, axis=1)
-  df['dtb_diff']=df[dtb_columns].apply(cal_diff, axis=1)
-#  df['dtb_skew']= df[dtb_columns].apply(compute_skew, axis= 1)
-#  df['dtb_kurt']= df[dtb_columns].apply(compute_kurt, axis= 1)
-#  df['ratio_greater7.5']=df[dtb_columns].apply(lambda row: row[row.ge(7.5)].count() / row.dropna().count(), axis=1)
-#  df['ratio_greater5']=df[dtb_columns].apply(lambda row: row[row.ge(5)].count() / row.dropna().count(), axis=1)
+  w_dtbhk = 0.5
+  w_sotchk = 0.3
+  w_drl = 0.2
 
-  drl_columns = [col for col in df.columns if col.endswith('_drl')]
+  dtbhk_cols = [col for col in df.columns if col.endswith('_dtbhk') ]
+  sotchk_cols = [col for col in df.columns if col.endswith('_sotchk') ]
+  drl_cols = [col for col in df.columns if col.endswith('_drl') ]
 
-  df['drl_mean']= np.nanmean(df[drl_columns],axis=1)
-  df['drl_std']= df[drl_columns].apply(cal_std, axis=1)
-#  df['drl_skew']= df[drl_columns].apply(compute_skew, axis= 1)
-#  df['drl_kurt']= df[drl_columns].apply(compute_kurt, axis= 1)
-#  df['ratio_excellent']=df[drl_columns].apply(lambda row: row[row.ge(90)].count() / row.dropna().count(), axis=1)
-#  df['ratio_undergood']=df[drl_columns].apply(lambda row: row[row.le(80)].count() / row.dropna().count(), axis=1)
+  df['AverageDTBHK'] = df[dtbhk_cols].mean(axis=1, skipna=True)
+  df['AverageSOTCHK'] = df[sotchk_cols].mean(axis=1, skipna=True)
+  df['AverageDRL'] = df[drl_cols].mean(axis=1, skipna=True)
+  df['NumSems'] = df[dtbhk_cols].notna().sum(axis=1)
 
-  sotchk_columns = [col for col in df.columns if col.endswith('_sotchk')]
-  df['sotchk_mean']= np.nanmean(df[sotchk_columns],axis=1)
+  print('*'*16)
+  print('Calculate Average done!')
 
-  #df['sotchk_std']= np.nanstd(df[drl_columns],axis=1)
-  #df['sotchk_skew']= df[drl_columns].apply(compute_skew, axis= 1)
-  #df['sotchk_kurt']= df[drl_columns].apply(compute_skew, axis= 1)
-  return df.drop(dtb_columns+drl_columns+sotchk_columns, axis=1)
+  segment_cols = ['AverageDTBHK','AverageSOTCHK','AverageDRL', 'NumSems']
+  df = calculate_perfCluster(df, segment_cols)
+
+  print('*'*16)
+  print('Calculate PerfCluster done!')
+
+  df['WeightedPerformance'] = (w_dtbhk*df['AverageDTBHK'] + w_sotchk*df['AverageSOTCHK'] + w_drl*df['AverageDRL'])/(w_dtbhk+w_sotchk+w_drl)
+
+  df['SlopeDTBHK'] = df.apply(lambda row: calculate_slope(row[dtbhk_cols]), axis=1)
+  df['SlopeSOTCHK'] = df.apply(lambda row: calculate_slope(row[sotchk_cols]), axis=1)
+  df['SlopeDRL'] = df.apply(lambda row: calculate_slope(row[drl_cols]), axis=1)
+
+  print('*'*16)
+  print('Calculate Performance done!')
+
+  df['StabilityDTBHK'] = df[dtbhk_cols].std(axis=1, skipna=True)
+  df['StabilitySOTCHK'] = df[sotchk_cols].std(axis=1, skipna=True)
+  df['StabilityDRL'] = df[drl_cols].std(axis=1, skipna=True)
+
+  print('*'*16)
+  print('Calculate Stability done!')
+
+  df['SlopeToStabilityDTBHK'] = df['SlopeDTBHK'] / df['StabilityDTBHK']
+  df['SlopeToStabilitySOTCHK'] = df['SlopeSOTCHK'] / df['StabilitySOTCHK']
+  df['SlopeToStabilityDRL'] = df['SlopeDRL'] / df['StabilityDRL']
+
+  print('*'*16)
+  print('Calculate SlopeToAverage done!')
+
+  return df.drop(dtbhk_cols+sotchk_cols+drl_cols, axis=1)
 
 # Get input from userd
 def get_input_from_user():
